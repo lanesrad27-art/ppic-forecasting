@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 import io
 import hashlib
 from datetime import datetime
+import psycopg2
+from psycopg2.extras import Json
+import json
 
 # ===========================
 # KONFIGURASI HALAMAN
@@ -16,67 +19,217 @@ st.set_page_config(
 )
 
 # ===========================
-# FUNGSI AUTHENTICATION
+# DATABASE CONFIGURATION
+# ===========================
+
+@st.cache_resource
+def init_connection():
+    """Initialize PostgreSQL connection"""
+    try:
+        # Ambil connection string dari Streamlit Secrets
+        conn = psycopg2.connect(st.secrets["database"]["url"])
+        return conn
+    except Exception as e:
+        st.error(f"❌ Database connection failed: {e}")
+        st.stop()
+
+def create_tables():
+    """Create tables if not exists"""
+    conn = init_connection()
+    cur = conn.cursor()
+    
+    # Table untuk users
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            username VARCHAR(50) PRIMARY KEY,
+            password VARCHAR(64) NOT NULL,
+            email VARCHAR(100) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Table untuk forecast history
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS forecast_history (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(50) REFERENCES users(username) ON DELETE CASCADE,
+            forecast_data JSONB NOT NULL,
+            parameters JSONB NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    conn.commit()
+    cur.close()
+
+# Initialize database
+create_tables()
+
+# ===========================
+# DATABASE FUNCTIONS
 # ===========================
 
 def hash_password(password):
     """Hash password menggunakan SHA256"""
     return hashlib.sha256(password.encode()).hexdigest()
 
-def init_auth_storage():
-    """Inisialisasi storage untuk users"""
-    if 'users_db' not in st.session_state:
-        st.session_state.users_db = {}
+def register_user_db(username, password, email):
+    """Register user baru ke database"""
+    conn = init_connection()
+    cur = conn.cursor()
+    
+    try:
+        # Cek apakah username sudah ada
+        cur.execute("SELECT username FROM users WHERE username = %s", (username,))
+        if cur.fetchone():
+            return False, "Username sudah digunakan!"
+        
+        # Insert user baru
+        cur.execute(
+            "INSERT INTO users (username, password, email) VALUES (%s, %s, %s)",
+            (username, hash_password(password), email)
+        )
+        conn.commit()
+        cur.close()
+        return True, "Registrasi berhasil! Silakan login."
+    except Exception as e:
+        conn.rollback()
+        cur.close()
+        return False, f"Error: {str(e)}"
+
+def login_user_db(username, password):
+    """Login user dari database"""
+    conn = init_connection()
+    cur = conn.cursor()
+    
+    cur.execute("SELECT password FROM users WHERE username = %s", (username,))
+    result = cur.fetchone()
+    cur.close()
+    
+    if not result:
+        return False, "Username tidak ditemukan!"
+    
+    if result[0] == hash_password(password):
+        return True, "Login berhasil!"
+    else:
+        return False, "Password salah!"
+
+def save_forecast_to_db(username, forecast_data, params):
+    """Simpan hasil forecast ke database"""
+    conn = init_connection()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute(
+            "INSERT INTO forecast_history (username, forecast_data, parameters) VALUES (%s, %s, %s)",
+            (username, Json(forecast_data), Json(params))
+        )
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        conn.rollback()
+        cur.close()
+        st.error(f"Error saving forecast: {e}")
+        return False
+
+def get_user_history_db(username):
+    """Ambil history forecast user dari database"""
+    conn = init_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        "SELECT id, forecast_data, parameters, created_at FROM forecast_history WHERE username = %s ORDER BY created_at DESC",
+        (username,)
+    )
+    results = cur.fetchall()
+    cur.close()
+    
+    history = []
+    for row in results:
+        history.append({
+            'id': row[0],
+            'forecast_data': row[1],
+            'params': row[2],
+            'timestamp': row[3].strftime("%Y-%m-%d %H:%M:%S")
+        })
+    
+    return history
+
+def get_user_info_db(username):
+    """Ambil info user dari database"""
+    conn = init_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        "SELECT email, created_at FROM users WHERE username = %s",
+        (username,)
+    )
+    result = cur.fetchone()
+    cur.close()
+    
+    if result:
+        return {
+            'email': result[0],
+            'created_at': result[1].strftime("%Y-%m-%d %H:%M:%S")
+        }
+    return None
+
+def delete_user_history_db(username):
+    """Hapus semua history user"""
+    conn = init_connection()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute("DELETE FROM forecast_history WHERE username = %s", (username,))
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        conn.rollback()
+        cur.close()
+        return False
+
+def get_user_stats_db(username):
+    """Ambil statistik user"""
+    conn = init_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        "SELECT COUNT(*) FROM forecast_history WHERE username = %s",
+        (username,)
+    )
+    total = cur.fetchone()[0]
+    
+    cur.execute(
+        "SELECT created_at FROM forecast_history WHERE username = %s ORDER BY created_at DESC LIMIT 1",
+        (username,)
+    )
+    last = cur.fetchone()
+    last_activity = last[0].strftime("%Y-%m-%d %H:%M:%S") if last else "Belum ada"
+    
+    cur.close()
+    
+    return {
+        'total_forecasts': total,
+        'last_activity': last_activity
+    }
+
+# ===========================
+# SESSION STATE MANAGEMENT
+# ===========================
+
+def init_session_state():
+    """Initialize session state"""
     if 'logged_in' not in st.session_state:
         st.session_state.logged_in = False
     if 'current_user' not in st.session_state:
         st.session_state.current_user = None
 
-def register_user(username, password, email):
-    """Register user baru"""
-    if username in st.session_state.users_db:
-        return False, "Username sudah digunakan!"
-    
-    st.session_state.users_db[username] = {
-        'password': hash_password(password),
-        'email': email,
-        'created_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'forecast_history': []
-    }
-    return True, "Registrasi berhasil! Silakan login."
-
-def login_user(username, password):
-    """Login user"""
-    if username not in st.session_state.users_db:
-        return False, "Username tidak ditemukan!"
-    
-    if st.session_state.users_db[username]['password'] == hash_password(password):
-        st.session_state.logged_in = True
-        st.session_state.current_user = username
-        return True, "Login berhasil!"
-    else:
-        return False, "Password salah!"
-
-def logout_user():
-    """Logout user"""
-    st.session_state.logged_in = False
-    st.session_state.current_user = None
-
-def save_forecast_to_history(username, forecast_data, params):
-    """Simpan hasil forecast ke history user"""
-    history_entry = {
-        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'forecast_data': forecast_data,
-        'params': params
-    }
-    st.session_state.users_db[username]['forecast_history'].append(history_entry)
-
-def get_user_history(username):
-    """Ambil history forecast user"""
-    return st.session_state.users_db[username]['forecast_history']
+init_session_state()
 
 # ===========================
-# FUNGSI NEURAL NETWORK (SAMA SEPERTI SEBELUMNYA)
+# NEURAL NETWORK FUNCTIONS
 # ===========================
 
 def sigmoid(x): 
@@ -136,17 +289,12 @@ def forecast_future(model, last_known_input, steps, data_min, data_max):
     return forecast_results_denorm
 
 # ===========================
-# INISIALISASI
-# ===========================
-init_auth_storage()
-
-# ===========================
 # LOGIN/REGISTER PAGE
 # ===========================
 
 if not st.session_state.logged_in:
     st.title("🔐 PPIC Forecasting System - Login")
-    st.markdown("### Silakan Login atau Register untuk melanjutkan")
+    st.markdown("### Sistem Forecasting dengan PostgreSQL Database")
     
     tab1, tab2 = st.tabs(["🔑 Login", "📝 Register"])
     
@@ -157,8 +305,10 @@ if not st.session_state.logged_in:
         
         if st.button("🚀 Login", type="primary", use_container_width=True):
             if login_username and login_password:
-                success, message = login_user(login_username, login_password)
+                success, message = login_user_db(login_username, login_password)
                 if success:
+                    st.session_state.logged_in = True
+                    st.session_state.current_user = login_username
                     st.success(message)
                     st.rerun()
                 else:
@@ -180,7 +330,7 @@ if not st.session_state.logged_in:
                 elif len(reg_password) < 6:
                     st.error("Password minimal 6 karakter!")
                 else:
-                    success, message = register_user(reg_username, reg_password, reg_email)
+                    success, message = register_user_db(reg_username, reg_password, reg_email)
                     if success:
                         st.success(message)
                     else:
@@ -189,14 +339,14 @@ if not st.session_state.logged_in:
                 st.warning("Mohon isi semua field!")
     
     st.markdown("---")
-    st.info("💡 **Demo Mode**: Data akan tersimpan selama session browser aktif. Untuk production, gunakan database seperti PostgreSQL atau MongoDB.")
+    st.success("✅ **Database:** PostgreSQL (Production Ready)")
+    st.info("💡 Data tersimpan permanen di cloud database")
 
 else:
     # ===========================
     # MAIN APP (SETELAH LOGIN)
     # ===========================
     
-    # Header dengan info user
     col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
         st.title("📊 PPIC Forecasting System Pro")
@@ -204,22 +354,18 @@ else:
         st.metric("👤 User", st.session_state.current_user)
     with col3:
         if st.button("🚪 Logout", use_container_width=True):
-            logout_user()
+            st.session_state.logged_in = False
+            st.session_state.current_user = None
             st.rerun()
     
     st.markdown("---")
     
-    # Sidebar untuk navigasi
     page = st.sidebar.radio(
         "📑 Menu Navigasi:",
         ["🏠 Forecasting", "📜 History", "👤 Profile"]
     )
     
     if page == "🏠 Forecasting":
-        # ===========================
-        # HALAMAN FORECASTING (SEPERTI SEBELUMNYA)
-        # ===========================
-        
         st.sidebar.markdown("---")
         st.sidebar.header("⚙️ Pengaturan")
         
@@ -370,18 +516,18 @@ else:
                             'Prediksi Demand': [int(val) for val in hasil_forecast]
                         })
                         
-                        # Simpan ke history
                         forecast_params = {
                             'window_size': window_size,
                             'hidden1': hidden1_size,
                             'hidden2': hidden2_size,
                             'learning_rate': learning_rate,
                             'epochs': epochs,
-                            'mse': mse_test,
-                            'mape': mape_test
+                            'mse': float(mse_test),
+                            'mape': float(mape_test)
                         }
-                        save_forecast_to_history(st.session_state.current_user, df_forecast.to_dict(), forecast_params)
-                        st.success("💾 Hasil forecast telah disimpan ke history!")
+                        
+                        if save_forecast_to_db(st.session_state.current_user, df_forecast.to_dict(), forecast_params):
+                            st.success("💾 Hasil forecast telah disimpan ke PostgreSQL database!")
                         
                         col1, col2 = st.columns([1, 2])
                         
@@ -466,21 +612,17 @@ Statistik Forecast:
             st.info("👈 Silakan input data demand melalui sidebar untuk memulai forecasting")
     
     elif page == "📜 History":
-        # ===========================
-        # HALAMAN HISTORY
-        # ===========================
-        
         st.header("📜 History Forecasting")
         
-        history = get_user_history(st.session_state.current_user)
+        history = get_user_history_db(st.session_state.current_user)
         
         if len(history) == 0:
             st.info("Belum ada history forecasting. Mulai forecasting untuk menyimpan history!")
         else:
-            st.success(f"Total {len(history)} forecasting telah dilakukan")
+            st.success(f"📊 Total {len(history)} forecasting telah dilakukan")
             
-            for idx, entry in enumerate(reversed(history)):
-                with st.expander(f"🔍 Forecast #{len(history) - idx} - {entry['timestamp']}"):
+            for idx, entry in enumerate(history):
+                with st.expander(f"🔍 Forecast #{idx + 1} - {entry['timestamp']}"):
                     col1, col2 = st.columns([2, 1])
                     
                     with col1:
@@ -498,54 +640,54 @@ Statistik Forecast:
                         st.write(f"**MSE:** {params['mse']:.6f}")
                         st.write(f"**MAPE:** {params['mape']:.2f}%")
                     
-                    # Download button untuk history
                     csv_buffer = io.StringIO()
                     df_hist.to_csv(csv_buffer, index=False)
                     st.download_button(
                         label="📥 Download Hasil Ini (CSV)",
                         data=csv_buffer.getvalue(),
-                        file_name=f"history_{idx}_{entry['timestamp'].replace(' ', '_').replace(':', '-')}.csv",
-                        mime="text/csv"
+                        file_name=f"history_{entry['id']}_{entry['timestamp'].replace(' ', '_').replace(':', '-')}.csv",
+                        mime="text/csv",
+                        key=f"download_{entry['id']}"
                     )
     
     elif page == "👤 Profile":
-        # ===========================
-        # HALAMAN PROFILE
-        # ===========================
-        
         st.header("👤 Profile User")
         
-        user_data = st.session_state.users_db[st.session_state.current_user]
+        user_info = get_user_info_db(st.session_state.current_user)
+        stats = get_user_stats_db(st.session_state.current_user)
         
         col1, col2 = st.columns(2)
         
         with col1:
             st.subheader("Informasi Akun")
             st.write(f"**Username:** {st.session_state.current_user}")
-            st.write(f"**Email:** {user_data['email']}")
-            st.write(f"**Member Since:** {user_data['created_at']}")
-            st.write(f"**Total Forecasts:** {len(user_data['forecast_history'])}")
+            st.write(f"**Email:** {user_info['email']}")
+            st.write(f"**Member Since:** {user_info['created_at']}")
+            st.write(f"**Total Forecasts:** {stats['total_forecasts']}")
         
         with col2:
             st.subheader("Statistik Penggunaan")
-            if len(user_data['forecast_history']) > 0:
-                st.metric("Total Forecasting", len(user_data['forecast_history']))
-                st.metric("Last Activity", user_data['forecast_history'][-1]['timestamp'])
-            else:
-                st.info("Belum ada aktivitas forecasting")
+            st.metric("Total Forecasting", stats['total_forecasts'])
+            st.metric("Last Activity", stats['last_activity'])
         
         st.markdown("---")
         
-        # Opsi hapus semua history
         st.subheader("⚙️ Pengaturan")
-        if st.button("🗑️ Hapus Semua History", type="secondary"):
-            st.session_state.users_db[st.session_state.current_user]['forecast_history'] = []
-            st.success("History berhasil dihapus!")
-            st.rerun()
+        col_a, col_b = st.columns(2)
+        
+        with col_a:
+            if st.button("🗑️ Hapus Semua History", type="secondary", use_container_width=True):
+                if delete_user_history_db(st.session_state.current_user):
+                    st.success("History berhasil dihapus!")
+                    st.rerun()
+                else:
+                    st.error("Gagal menghapus history!")
+        
+        with col_b:
+            st.info("💾 Data tersimpan permanen di PostgreSQL")
 
-# Footer
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: gray;'>PPIC Forecasting System Pro | With Authentication & Database</div>",
+    "<div style='text-align: center; color: gray;'>PPIC Forecasting System Pro | PostgreSQL Database</div>",
     unsafe_allow_html=True
 )
