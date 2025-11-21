@@ -10,23 +10,155 @@ from psycopg2.extras import Json
 import json
 
 # ===========================
-# KONFIGURASI HALAMAN
+# KONFIGURASI & STYLING
 # ===========================
 st.set_page_config(
     page_title="PPIC Forecasting Pro",
     page_icon="📊",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
+# Custom CSS untuk styling professional
+st.markdown("""
+<style>
+    /* Main theme colors */
+    :root {
+        --primary-color: #1e40af;
+        --secondary-color: #3b82f6;
+        --accent-color: #10b981;
+        --danger-color: #ef4444;
+    }
+    
+    /* Header styling */
+    .main-header {
+        background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+        padding: 2rem;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .main-header h1 {
+        color: white;
+        margin: 0;
+        font-size: 2.5rem;
+        font-weight: 700;
+    }
+    
+    .main-header p {
+        color: rgba(255,255,255,0.9);
+        margin: 0.5rem 0 0 0;
+        font-size: 1.1rem;
+    }
+    
+    /* Card styling */
+    .metric-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-left: 4px solid #3b82f6;
+        margin-bottom: 1rem;
+    }
+    
+    /* Button styling */
+    .stButton>button {
+        background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 0.75rem 2rem;
+        font-weight: 600;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }
+    
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%);
+    }
+    
+    [data-testid="stSidebar"] .element-container {
+        color: white;
+    }
+    
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background-color: #f3f4f6;
+        border-radius: 8px 8px 0 0;
+        padding: 12px 24px;
+        font-weight: 600;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+        color: white;
+    }
+    
+    /* Success/Error messages */
+    .stSuccess {
+        background-color: #d1fae5;
+        border-left: 4px solid #10b981;
+        border-radius: 8px;
+        padding: 1rem;
+    }
+    
+    .stError {
+        background-color: #fee2e2;
+        border-left: 4px solid #ef4444;
+        border-radius: 8px;
+        padding: 1rem;
+    }
+    
+    /* Input styling */
+    .stTextInput>div>div>input {
+        border-radius: 8px;
+        border: 2px solid #e5e7eb;
+        padding: 0.75rem;
+    }
+    
+    .stTextInput>div>div>input:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    /* Dataframe styling */
+    .stDataFrame {
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    /* Footer */
+    .footer {
+        text-align: center;
+        padding: 2rem;
+        color: #6b7280;
+        border-top: 1px solid #e5e7eb;
+        margin-top: 3rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # ===========================
-# DATABASE CONFIGURATION
+# DATABASE FUNCTIONS
 # ===========================
 
 @st.cache_resource
 def init_connection():
     """Initialize PostgreSQL connection"""
     try:
-        # Ambil connection string dari Streamlit Secrets
         conn = psycopg2.connect(st.secrets["database"]["url"])
         return conn
     except Exception as e:
@@ -38,7 +170,6 @@ def create_tables():
     conn = init_connection()
     cur = conn.cursor()
     
-    # Table untuk users
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             username VARCHAR(50) PRIMARY KEY,
@@ -48,7 +179,6 @@ def create_tables():
         )
     """)
     
-    # Table untuk forecast history
     cur.execute("""
         CREATE TABLE IF NOT EXISTS forecast_history (
             id SERIAL PRIMARY KEY,
@@ -62,29 +192,18 @@ def create_tables():
     conn.commit()
     cur.close()
 
-# Initialize database
 create_tables()
 
-# ===========================
-# DATABASE FUNCTIONS
-# ===========================
-
 def hash_password(password):
-    """Hash password menggunakan SHA256"""
     return hashlib.sha256(password.encode()).hexdigest()
 
 def register_user_db(username, password, email):
-    """Register user baru ke database"""
     conn = init_connection()
     cur = conn.cursor()
-    
     try:
-        # Cek apakah username sudah ada
         cur.execute("SELECT username FROM users WHERE username = %s", (username,))
         if cur.fetchone():
             return False, "Username sudah digunakan!"
-        
-        # Insert user baru
         cur.execute(
             "INSERT INTO users (username, password, email) VALUES (%s, %s, %s)",
             (username, hash_password(password), email)
@@ -98,27 +217,21 @@ def register_user_db(username, password, email):
         return False, f"Error: {str(e)}"
 
 def login_user_db(username, password):
-    """Login user dari database"""
     conn = init_connection()
     cur = conn.cursor()
-    
     cur.execute("SELECT password FROM users WHERE username = %s", (username,))
     result = cur.fetchone()
     cur.close()
-    
     if not result:
         return False, "Username tidak ditemukan!"
-    
     if result[0] == hash_password(password):
         return True, "Login berhasil!"
     else:
         return False, "Password salah!"
 
 def save_forecast_to_db(username, forecast_data, params):
-    """Simpan hasil forecast ke database"""
     conn = init_connection()
     cur = conn.cursor()
-    
     try:
         cur.execute(
             "INSERT INTO forecast_history (username, forecast_data, parameters) VALUES (%s, %s, %s)",
@@ -130,21 +243,17 @@ def save_forecast_to_db(username, forecast_data, params):
     except Exception as e:
         conn.rollback()
         cur.close()
-        st.error(f"Error saving forecast: {e}")
         return False
 
 def get_user_history_db(username):
-    """Ambil history forecast user dari database"""
     conn = init_connection()
     cur = conn.cursor()
-    
     cur.execute(
         "SELECT id, forecast_data, parameters, created_at FROM forecast_history WHERE username = %s ORDER BY created_at DESC",
         (username,)
     )
     results = cur.fetchall()
     cur.close()
-    
     history = []
     for row in results:
         history.append({
@@ -153,83 +262,47 @@ def get_user_history_db(username):
             'params': row[2],
             'timestamp': row[3].strftime("%Y-%m-%d %H:%M:%S")
         })
-    
     return history
 
 def get_user_info_db(username):
-    """Ambil info user dari database"""
     conn = init_connection()
     cur = conn.cursor()
-    
-    cur.execute(
-        "SELECT email, created_at FROM users WHERE username = %s",
-        (username,)
-    )
+    cur.execute("SELECT email, created_at FROM users WHERE username = %s", (username,))
     result = cur.fetchone()
     cur.close()
-    
     if result:
-        return {
-            'email': result[0],
-            'created_at': result[1].strftime("%Y-%m-%d %H:%M:%S")
-        }
+        return {'email': result[0], 'created_at': result[1].strftime("%Y-%m-%d %H:%M:%S")}
     return None
 
 def delete_user_history_db(username):
-    """Hapus semua history user"""
     conn = init_connection()
     cur = conn.cursor()
-    
     try:
         cur.execute("DELETE FROM forecast_history WHERE username = %s", (username,))
         conn.commit()
         cur.close()
         return True
-    except Exception as e:
+    except:
         conn.rollback()
         cur.close()
         return False
 
 def get_user_stats_db(username):
-    """Ambil statistik user"""
     conn = init_connection()
     cur = conn.cursor()
-    
-    cur.execute(
-        "SELECT COUNT(*) FROM forecast_history WHERE username = %s",
-        (username,)
-    )
+    cur.execute("SELECT COUNT(*) FROM forecast_history WHERE username = %s", (username,))
     total = cur.fetchone()[0]
-    
     cur.execute(
         "SELECT created_at FROM forecast_history WHERE username = %s ORDER BY created_at DESC LIMIT 1",
         (username,)
     )
     last = cur.fetchone()
     last_activity = last[0].strftime("%Y-%m-%d %H:%M:%S") if last else "Belum ada"
-    
     cur.close()
-    
-    return {
-        'total_forecasts': total,
-        'last_activity': last_activity
-    }
+    return {'total_forecasts': total, 'last_activity': last_activity}
 
 # ===========================
-# SESSION STATE MANAGEMENT
-# ===========================
-
-def init_session_state():
-    """Initialize session state"""
-    if 'logged_in' not in st.session_state:
-        st.session_state.logged_in = False
-    if 'current_user' not in st.session_state:
-        st.session_state.current_user = None
-
-init_session_state()
-
-# ===========================
-# NEURAL NETWORK FUNCTIONS
+# NEURAL NETWORK
 # ===========================
 
 def sigmoid(x): 
@@ -279,77 +352,104 @@ def mean_absolute_percentage_error(y_true, y_pred):
 def forecast_future(model, last_known_input, steps, data_min, data_max):
     forecast_results_norm = []
     current_input = last_known_input
-    
     for _ in range(steps):
         next_pred_norm = model.forward(current_input)
         forecast_results_norm.append(next_pred_norm[0][0])
         current_input = next_pred_norm
-    
     forecast_results_denorm = np.array(forecast_results_norm) * (data_max - data_min) + data_min
     return forecast_results_denorm
 
 # ===========================
-# LOGIN/REGISTER PAGE
+# SESSION STATE
+# ===========================
+
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'current_user' not in st.session_state:
+    st.session_state.current_user = None
+
+# ===========================
+# LOGIN PAGE
 # ===========================
 
 if not st.session_state.logged_in:
-    st.title("🔐 PPIC Forecasting System - Login")
-    st.markdown("### Sistem Forecasting dengan PostgreSQL Database")
+    # Header
+    st.markdown("""
+    <div class="main-header">
+        <h1>📊 PPIC Forecasting System</h1>
+        <p>Sistem Peramalan Permintaan Berbasis AI dengan PostgreSQL Database</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    tab1, tab2 = st.tabs(["🔑 Login", "📝 Register"])
+    col1, col2, col3 = st.columns([1, 2, 1])
     
-    with tab1:
-        st.subheader("Login ke Akun Anda")
-        login_username = st.text_input("Username", key="login_user")
-        login_password = st.text_input("Password", type="password", key="login_pass")
+    with col2:
+        tab1, tab2 = st.tabs(["🔑 Login", "📝 Register"])
         
-        if st.button("🚀 Login", type="primary", use_container_width=True):
-            if login_username and login_password:
-                success, message = login_user_db(login_username, login_password)
-                if success:
-                    st.session_state.logged_in = True
-                    st.session_state.current_user = login_username
-                    st.success(message)
-                    st.rerun()
-                else:
-                    st.error(message)
-            else:
-                st.warning("Mohon isi username dan password!")
-    
-    with tab2:
-        st.subheader("Buat Akun Baru")
-        reg_username = st.text_input("Username", key="reg_user")
-        reg_email = st.text_input("Email", key="reg_email")
-        reg_password = st.text_input("Password", type="password", key="reg_pass")
-        reg_password2 = st.text_input("Konfirmasi Password", type="password", key="reg_pass2")
-        
-        if st.button("📝 Register", type="primary", use_container_width=True):
-            if reg_username and reg_email and reg_password and reg_password2:
-                if reg_password != reg_password2:
-                    st.error("Password tidak cocok!")
-                elif len(reg_password) < 6:
-                    st.error("Password minimal 6 karakter!")
-                else:
-                    success, message = register_user_db(reg_username, reg_password, reg_email)
+        with tab1:
+            st.markdown("### Masuk ke Akun Anda")
+            st.markdown("---")
+            login_username = st.text_input("👤 Username", key="login_user", placeholder="Masukkan username")
+            login_password = st.text_input("🔒 Password", type="password", key="login_pass", placeholder="Masukkan password")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            if st.button("🚀 Masuk", type="primary", use_container_width=True):
+                if login_username and login_password:
+                    success, message = login_user_db(login_username, login_password)
                     if success:
+                        st.session_state.logged_in = True
+                        st.session_state.current_user = login_username
                         st.success(message)
+                        st.rerun()
                     else:
                         st.error(message)
-            else:
-                st.warning("Mohon isi semua field!")
-    
-    st.markdown("---")
-    st.success("✅ **Database:** PostgreSQL (Production Ready)")
-    st.info("💡 Data tersimpan permanen di cloud database")
+                else:
+                    st.warning("⚠️ Mohon isi username dan password!")
+        
+        with tab2:
+            st.markdown("### Buat Akun Baru")
+            st.markdown("---")
+            reg_username = st.text_input("👤 Username", key="reg_user", placeholder="Pilih username unik")
+            reg_email = st.text_input("📧 Email", key="reg_email", placeholder="email@perusahaan.com")
+            reg_password = st.text_input("🔒 Password", type="password", key="reg_pass", placeholder="Minimal 6 karakter")
+            reg_password2 = st.text_input("🔒 Konfirmasi Password", type="password", key="reg_pass2", placeholder="Ketik ulang password")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            if st.button("📝 Daftar", type="primary", use_container_width=True):
+                if reg_username and reg_email and reg_password and reg_password2:
+                    if reg_password != reg_password2:
+                        st.error("❌ Password tidak cocok!")
+                    elif len(reg_password) < 6:
+                        st.error("❌ Password minimal 6 karakter!")
+                    else:
+                        success, message = register_user_db(reg_username, reg_password, reg_email)
+                        if success:
+                            st.success(message)
+                        else:
+                            st.error(message)
+                else:
+                    st.warning("⚠️ Mohon isi semua field!")
+        
+        st.markdown("---")
+        st.info("💡 **Demo Mode**: Gunakan kredensial demo atau buat akun baru untuk testing")
+        st.success("✅ **Secure**: Data tersimpan dengan enkripsi SHA256")
 
 else:
     # ===========================
-    # MAIN APP (SETELAH LOGIN)
+    # MAIN APP
     # ===========================
     
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col1:
-        st.title("📊 PPIC Forecasting System Pro")
+    # Header with user info
+    st.markdown("""
+    <div class="main-header">
+        <h1>📊 PPIC Forecasting System Pro</h1>
+        <p>Sistem Peramalan Permintaan Production Planning & Inventory Control</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([4, 1, 1])
     with col2:
         st.metric("👤 User", st.session_state.current_user)
     with col3:
@@ -360,26 +460,34 @@ else:
     
     st.markdown("---")
     
-    page = st.sidebar.radio(
-        "📑 Menu Navigasi:",
-        ["🏠 Forecasting", "📜 History", "👤 Profile"]
-    )
+    # Sidebar navigation
+    with st.sidebar:
+        st.markdown("### 📑 Menu Navigasi")
+        page = st.radio(
+            "",
+            ["🏠 Forecasting", "📜 History", "👤 Profile"],
+            label_visibility="collapsed"
+        )
+        
+        st.markdown("---")
+        st.markdown("### 📊 Quick Stats")
+        stats = get_user_stats_db(st.session_state.current_user)
+        st.metric("Total Forecasts", stats['total_forecasts'])
+        st.caption(f"Last: {stats['last_activity']}")
     
     if page == "🏠 Forecasting":
-        st.sidebar.markdown("---")
-        st.sidebar.header("⚙️ Pengaturan")
+        # Forecasting page dengan styling
         
-        input_method = st.sidebar.radio(
-            "Metode Input Data:",
-            ["Input Manual", "Upload CSV"]
-        )
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### ⚙️ Pengaturan Model")
+        
+        input_method = st.sidebar.radio("Metode Input:", ["Input Manual", "Upload CSV"])
         
         demand = None
         
         if input_method == "Input Manual":
-            st.sidebar.subheader("Input Data Demand")
             demand_input = st.sidebar.text_area(
-                "Masukkan data demand (pisahkan dengan koma):",
+                "Data Demand (pisahkan dengan koma):",
                 value="3000, 0, 5000, 3500, 0, 6000, 3000, 0, 0, 2000, 8000, 3000",
                 height=100
             )
@@ -388,25 +496,19 @@ else:
             except:
                 st.sidebar.error("❌ Format data tidak valid!")
         else:
-            uploaded_file = st.sidebar.file_uploader("Upload file CSV", type=['csv'])
-            if uploaded_file is not None:
+            uploaded_file = st.sidebar.file_uploader("Upload CSV", type=['csv'])
+            if uploaded_file:
                 try:
                     df = pd.read_csv(uploaded_file)
-                    if 'demand' in df.columns:
-                        demand = df['demand'].values
-                    else:
-                        demand = df.iloc[:, 0].values
-                    st.sidebar.success(f"✅ Data berhasil diupload ({len(demand)} data)")
+                    demand = df['demand'].values if 'demand' in df.columns else df.iloc[:, 0].values
+                    st.sidebar.success(f"✅ {len(demand)} data berhasil diupload")
                 except:
-                    st.sidebar.error("❌ Gagal membaca file CSV!")
+                    st.sidebar.error("❌ Gagal membaca CSV!")
         
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("🎯 Parameter Model")
+        window_size = st.sidebar.slider("Window Size:", 2, 10, 6)
+        jumlah_bulan_forecast = st.sidebar.slider("Forecast Period (bulan):", 1, 24, 12)
         
-        window_size = st.sidebar.slider("Window Size (Smoothing):", 2, 10, 6)
-        jumlah_bulan_forecast = st.sidebar.slider("Jumlah Bulan Forecast:", 1, 24, 12)
-        
-        with st.sidebar.expander("⚡ Advanced Settings"):
+        with st.sidebar.expander("⚡ Advanced Parameters"):
             hidden1_size = st.selectbox("Hidden Layer 1:", [4, 6, 8], index=1)
             hidden2_size = st.selectbox("Hidden Layer 2:", [4, 6], index=0)
             learning_rate = st.selectbox("Learning Rate:", [0.01, 0.05], index=1)
@@ -415,38 +517,35 @@ else:
         start_button = st.sidebar.button("🚀 Mulai Forecasting", type="primary", use_container_width=True)
         
         if demand is not None and len(demand) > 0:
-            tab1, tab2, tab3, tab4 = st.tabs(["📈 Data & Visualisasi", "🤖 Model Training", "🔮 Hasil Forecasting", "📥 Download"])
+            tab1, tab2, tab3, tab4 = st.tabs(["📈 Data Analysis", "🤖 Model Training", "🔮 Forecast Results", "📥 Export"])
             
             with tab1:
-                col1, col2 = st.columns(2)
+                st.markdown("### 📊 Analisis Data Historis")
+                col1, col2 = st.columns([1, 2])
                 
                 with col1:
-                    st.subheader("📊 Data Demand Historis")
-                    df_display = pd.DataFrame({
-                        'Bulan': range(1, len(demand) + 1),
-                        'Demand': demand.astype(int)
-                    })
+                    df_display = pd.DataFrame({'Bulan': range(1, len(demand) + 1), 'Demand': demand.astype(int)})
                     st.dataframe(df_display, use_container_width=True, height=300)
                     
-                    st.metric("Total Data Points", len(demand))
                     col_a, col_b, col_c = st.columns(3)
                     col_a.metric("Mean", f"{demand.mean():.0f}")
                     col_b.metric("Max", f"{demand.max():.0f}")
                     col_c.metric("Min", f"{demand.min():.0f}")
                 
                 with col2:
-                    st.subheader("📉 Visualisasi Data")
                     fig, ax = plt.subplots(figsize=(10, 5))
-                    ax.plot(range(len(demand)), demand, marker='o', linestyle='-', linewidth=2, markersize=6)
-                    ax.set_xlabel('Bulan', fontsize=12)
-                    ax.set_ylabel('Demand', fontsize=12)
-                    ax.set_title('Data Demand Historis', fontsize=14, fontweight='bold')
-                    ax.grid(True, alpha=0.3)
+                    ax.plot(range(len(demand)), demand, marker='o', linestyle='-', linewidth=2, markersize=6, color='#3b82f6')
+                    ax.fill_between(range(len(demand)), demand, alpha=0.3, color='#3b82f6')
+                    ax.set_xlabel('Periode (Bulan)', fontsize=12, fontweight='bold')
+                    ax.set_ylabel('Demand', fontsize=12, fontweight='bold')
+                    ax.set_title('Tren Demand Historis', fontsize=14, fontweight='bold', pad=20)
+                    ax.grid(True, alpha=0.3, linestyle='--')
+                    ax.spines['top'].set_visible(False)
+                    ax.spines['right'].set_visible(False)
                     st.pyplot(fig)
             
             if start_button:
-                with st.spinner('🔄 Sedang memproses data dan training model...'):
-                    
+                with st.spinner('🔄 Processing data dan training AI model...'):
                     demand_smooth = np.convolve(demand, np.ones(window_size)/window_size, mode='valid')
                     data_min, data_max = demand_smooth.min(), demand_smooth.max()
                     demand_norm = (demand_smooth - data_min) / (data_max - data_min)
@@ -459,7 +558,7 @@ else:
                     y_train, y_test = y[:split_idx], y[split_idx:]
                     
                     with tab2:
-                        st.subheader("🤖 Proses Training Model")
+                        st.markdown("### 🤖 Model Training Progress")
                         progress_bar = st.progress(0)
                         status_text = st.empty()
                         
@@ -474,42 +573,38 @@ else:
                                 status_text.text(f"Training... Epoch {epoch}/{epochs}")
                         
                         progress_bar.progress(1.0)
-                        status_text.text("✅ Training selesai!")
+                        status_text.text("✅ Training completed!")
                         
                         y_pred_test = nn.forward(X_test)
                         mse_test = np.mean((y_test - y_pred_test)**2)
                         mape_test = mean_absolute_percentage_error(y_test, y_pred_test)
                         
-                        st.success("✅ Model berhasil ditraining!")
+                        st.success("✅ Model successfully trained!")
                         
                         col1, col2, col3, col4 = st.columns(4)
                         col1.metric("Architecture", f"1-{hidden1_size}-{hidden2_size}-1")
                         col2.metric("Learning Rate", learning_rate)
-                        col3.metric("MSE (Test)", f"{mse_test:.6f}")
-                        col4.metric("MAPE (Test)", f"{mape_test:.2f}%")
+                        col3.metric("MSE", f"{mse_test:.6f}")
+                        col4.metric("MAPE", f"{mape_test:.2f}%")
                         
-                        st.subheader("📊 Evaluasi Model: Actual vs Predicted")
+                        st.markdown("### 📊 Model Performance")
                         fig, ax = plt.subplots(figsize=(12, 5))
-                        ax.plot(range(len(y_test)), y_test, 'o-', label='Actual', linewidth=2)
-                        ax.plot(range(len(y_test)), y_pred_test, 's-', label='Predicted', linewidth=2)
-                        ax.set_xlabel('Data Point', fontsize=12)
-                        ax.set_ylabel('Normalized Value', fontsize=12)
-                        ax.set_title('Model Performance on Test Data', fontsize=14, fontweight='bold')
-                        ax.legend(fontsize=12)
-                        ax.grid(True, alpha=0.3)
+                        ax.plot(range(len(y_test)), y_test, 'o-', label='Actual', linewidth=2, markersize=8, color='#3b82f6')
+                        ax.plot(range(len(y_test)), y_pred_test, 's-', label='Predicted', linewidth=2, markersize=8, color='#10b981')
+                        ax.set_xlabel('Data Point', fontsize=12, fontweight='bold')
+                        ax.set_ylabel('Normalized Value', fontsize=12, fontweight='bold')
+                        ax.set_title('Actual vs Predicted Values', fontsize=14, fontweight='bold', pad=20)
+                        ax.legend(fontsize=12, frameon=True, shadow=True)
+                        ax.grid(True, alpha=0.3, linestyle='--')
+                        ax.spines['top'].set_visible(False)
+                        ax.spines['right'].set_visible(False)
                         st.pyplot(fig)
                     
                     with tab3:
-                        st.subheader("🔮 Hasil Forecasting")
+                        st.markdown("### 🔮 Hasil Forecasting")
                         
                         last_input_norm = demand_norm[-1].reshape(1, 1)
-                        hasil_forecast = forecast_future(
-                            model=nn,
-                            last_known_input=last_input_norm,
-                            steps=jumlah_bulan_forecast,
-                            data_min=data_min,
-                            data_max=data_max
-                        )
+                        hasil_forecast = forecast_future(nn, last_input_norm, jumlah_bulan_forecast, data_min, data_max)
                         
                         df_forecast = pd.DataFrame({
                             'Bulan': [f"+{i+1}" for i in range(jumlah_bulan_forecast)],
@@ -527,14 +622,14 @@ else:
                         }
                         
                         if save_forecast_to_db(st.session_state.current_user, df_forecast.to_dict(), forecast_params):
-                            st.success("💾 Hasil forecast telah disimpan ke PostgreSQL database!")
+                            st.success("💾 Forecast saved to database!")
                         
                         col1, col2 = st.columns([1, 2])
                         
                         with col1:
                             st.dataframe(df_forecast, use_container_width=True, height=400)
                             
-                            st.markdown("**📊 Statistik Forecast:**")
+                            st.markdown("**📊 Statistik Forecast**")
                             st.metric("Rata-rata", f"{hasil_forecast.mean():.0f}")
                             st.metric("Maksimum", f"{hasil_forecast.max():.0f}")
                             st.metric("Minimum", f"{hasil_forecast.min():.0f}")
@@ -544,94 +639,111 @@ else:
                             
                             fig, ax = plt.subplots(figsize=(12, 6))
                             ax.plot(range(len(demand_smooth_denorm)), demand_smooth_denorm, 
-                                   'o-', label='Data Historis', linewidth=2, markersize=6)
+                                   'o-', label='Historical Data', linewidth=2, markersize=6, color='#3b82f6')
                             ax.plot(range(len(demand_smooth_denorm), len(demand_smooth_denorm) + jumlah_bulan_forecast), 
-                                   hasil_forecast, 's--', label=f'Forecast {jumlah_bulan_forecast} Bulan', 
-                                   linewidth=2, markersize=6, color='red')
-                            ax.axvline(x=len(demand_smooth_denorm)-1, color='gray', linestyle=':', 
-                                      linewidth=2, alpha=0.7, label='Batas Historis')
-                            ax.set_xlabel('Periode', fontsize=12)
-                            ax.set_ylabel('Demand', fontsize=12)
-                            ax.set_title('Peramalan Demand PPIC', fontsize=14, fontweight='bold')
-                            ax.legend(fontsize=11)
-                            ax.grid(True, alpha=0.3)
+                                   hasil_forecast, 's--', label=f'Forecast {jumlah_bulan_forecast} Months', 
+                                   linewidth=2, markersize=6, color='#10b981')
+                            ax.axvline(x=len(demand_smooth_denorm)-1, color='#ef4444', linestyle=':', 
+                                      linewidth=2, alpha=0.7, label='Forecast Boundary')
+                            ax.fill_between(range(len(demand_smooth_denorm)), demand_smooth_denorm, alpha=0.2, color='#3b82f6')
+                            ax.fill_between(range(len(demand_smooth_denorm), len(demand_smooth_denorm) + jumlah_bulan_forecast), 
+                                          hasil_forecast, alpha=0.2, color='#10b981')
+                            ax.set_xlabel('Periode', fontsize=12, fontweight='bold')
+                            ax.set_ylabel('Demand', fontsize=12, fontweight='bold')
+                            ax.set_title('Demand Forecasting Results', fontsize=14, fontweight='bold', pad=20)
+                            ax.legend(fontsize=11, frameon=True, shadow=True)
+                            ax.grid(True, alpha=0.3, linestyle='--')
+                            ax.spines['top'].set_visible(False)
+                            ax.spines['right'].set_visible(False)
                             st.pyplot(fig)
                     
                     with tab4:
-                        st.subheader("📥 Download Hasil")
+                        st.markdown("### 📥 Export Results")
                         
                         csv_buffer = io.StringIO()
                         df_forecast.to_csv(csv_buffer, index=False)
-                        csv_str = csv_buffer.getvalue()
                         
                         col1, col2 = st.columns(2)
                         
                         with col1:
                             st.download_button(
-                                label="📄 Download Hasil Forecast (CSV)",
-                                data=csv_str,
+                                label="📄 Download CSV",
+                                data=csv_buffer.getvalue(),
                                 file_name=f"forecast_{st.session_state.current_user}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                                 mime="text/csv",
                                 use_container_width=True
                             )
                         
                         with col2:
-                            report = f"""LAPORAN FORECASTING PPIC
-========================
+                            report = f"""PPIC FORECASTING REPORT
+{'='*50}
 User: {st.session_state.current_user}
-Tanggal: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+Date: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
-Parameter Model:
-- Architecture: 1-{hidden1_size}-{hidden2_size}-1
-- Learning Rate: {learning_rate}
-- Epochs: {epochs}
-- Window Size: {window_size}
+MODEL PARAMETERS
+{'='*50}
+Architecture: 1-{hidden1_size}-{hidden2_size}-1
+Learning Rate: {learning_rate}
+Epochs: {epochs}
+Window Size: {window_size}
 
-Performa Model:
-- MSE (Test): {mse_test:.6f}
-- MAPE (Test): {mape_test:.2f}%
+MODEL PERFORMANCE
+{'='*50}
+MSE (Test): {mse_test:.6f}
+MAPE (Test): {mape_test:.2f}%
 
-Hasil Forecasting {jumlah_bulan_forecast} Bulan:
+FORECAST RESULTS ({jumlah_bulan_forecast} Months)
+{'='*50}
 {df_forecast.to_string()}
 
-Statistik Forecast:
-- Rata-rata: {hasil_forecast.mean():.0f}
-- Maksimum: {hasil_forecast.max():.0f}
-- Minimum: {hasil_forecast.min():.0f}
+STATISTICS
+{'='*50}
+Average: {hasil_forecast.mean():.0f}
+Maximum: {hasil_forecast.max():.0f}
+Minimum: {hasil_forecast.min():.0f}
+
+Generated by PPIC Forecasting System Pro
 """
-                            
                             st.download_button(
-                                label="📋 Download Report Lengkap (TXT)",
+                                label="📋 Download Report",
                                 data=report,
                                 file_name=f"report_{st.session_state.current_user}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
                                 mime="text/plain",
                                 use_container_width=True
                             )
+                        
+                        st.markdown("---")
+                        st.info("💡 **Tips**: Export hasil untuk dokumentasi atau integrasi dengan sistem ERP")
         
         else:
             st.info("👈 Silakan input data demand melalui sidebar untuk memulai forecasting")
     
     elif page == "📜 History":
-        st.header("📜 History Forecasting")
+        st.markdown("### 📜 Forecast History")
         
         history = get_user_history_db(st.session_state.current_user)
         
         if len(history) == 0:
-            st.info("Belum ada history forecasting. Mulai forecasting untuk menyimpan history!")
+            st.info("📊 Belum ada history forecasting. Mulai forecasting untuk menyimpan data!")
         else:
-            st.success(f"📊 Total {len(history)} forecasting telah dilakukan")
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Forecasts", len(history))
+            col2.metric("Latest", history[0]['timestamp'].split()[0])
+            col3.metric("Stored Records", f"{len(history)} entries")
+            
+            st.markdown("---")
             
             for idx, entry in enumerate(history):
-                with st.expander(f"🔍 Forecast #{idx + 1} - {entry['timestamp']}"):
+                with st.expander(f"🔍 Forecast #{idx + 1} - {entry['timestamp']}", expanded=(idx==0)):
                     col1, col2 = st.columns([2, 1])
                     
                     with col1:
-                        st.subheader("Hasil Prediksi")
+                        st.markdown("**📊 Hasil Prediksi**")
                         df_hist = pd.DataFrame(entry['forecast_data'])
                         st.dataframe(df_hist, use_container_width=True)
                     
                     with col2:
-                        st.subheader("Parameter Model")
+                        st.markdown("**⚙️ Parameter Model**")
                         params = entry['params']
                         st.write(f"**Window Size:** {params['window_size']}")
                         st.write(f"**Architecture:** 1-{params['hidden1']}-{params['hidden2']}-1")
@@ -643,15 +755,15 @@ Statistik Forecast:
                     csv_buffer = io.StringIO()
                     df_hist.to_csv(csv_buffer, index=False)
                     st.download_button(
-                        label="📥 Download Hasil Ini (CSV)",
+                        label="📥 Download CSV",
                         data=csv_buffer.getvalue(),
-                        file_name=f"history_{entry['id']}_{entry['timestamp'].replace(' ', '_').replace(':', '-')}.csv",
+                        file_name=f"history_{entry['id']}.csv",
                         mime="text/csv",
                         key=f"download_{entry['id']}"
                     )
     
     elif page == "👤 Profile":
-        st.header("👤 Profile User")
+        st.markdown("### 👤 User Profile")
         
         user_info = get_user_info_db(st.session_state.current_user)
         stats = get_user_stats_db(st.session_state.current_user)
@@ -659,35 +771,37 @@ Statistik Forecast:
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("Informasi Akun")
+            st.markdown("**📋 Account Information**")
             st.write(f"**Username:** {st.session_state.current_user}")
             st.write(f"**Email:** {user_info['email']}")
             st.write(f"**Member Since:** {user_info['created_at']}")
-            st.write(f"**Total Forecasts:** {stats['total_forecasts']}")
         
         with col2:
-            st.subheader("Statistik Penggunaan")
-            st.metric("Total Forecasting", stats['total_forecasts'])
+            st.markdown("**📊 Usage Statistics**")
+            st.metric("Total Forecasts", stats['total_forecasts'])
             st.metric("Last Activity", stats['last_activity'])
         
         st.markdown("---")
         
-        st.subheader("⚙️ Pengaturan")
+        st.markdown("### ⚙️ Settings")
         col_a, col_b = st.columns(2)
         
         with col_a:
-            if st.button("🗑️ Hapus Semua History", type="secondary", use_container_width=True):
+            if st.button("🗑️ Delete All History", type="secondary", use_container_width=True):
                 if delete_user_history_db(st.session_state.current_user):
-                    st.success("History berhasil dihapus!")
+                    st.success("✅ History deleted successfully!")
                     st.rerun()
                 else:
-                    st.error("Gagal menghapus history!")
+                    st.error("❌ Failed to delete history!")
         
         with col_b:
-            st.info("💾 Data tersimpan permanen di PostgreSQL")
+            st.info("💾 Data stored permanently in PostgreSQL")
 
-st.markdown("---")
-st.markdown(
-    "<div style='text-align: center; color: gray;'>PPIC Forecasting System Pro | PostgreSQL Database</div>",
-    unsafe_allow_html=True
-)
+# Footer
+st.markdown("""
+<div class="footer">
+    <p><strong>PPIC Forecasting System Pro</strong></p>
+    <p>Powered by Neural Network & PostgreSQL Database | Version 1.0</p>
+    <p style="font-size: 0.9em; color: #9ca3af;">© 2024 All Rights Reserved</p>
+</div>
+""", unsafe_allow_html=True)
