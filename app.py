@@ -13,7 +13,7 @@ import json
 # KONFIGURASI HALAMAN
 # ===========================
 st.set_page_config(
-    page_title="PPIC Forecasting Pro",
+    page_title="PPIC Forecasting",
     page_icon="📊",
     layout="wide"
 )
@@ -349,7 +349,7 @@ else:
     
     col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
-        st.title("📊 PPIC Forecasting System Pro")
+        st.title("📊 PPIC Forecasting System")
     with col2:
         st.metric("👤 User", st.session_state.current_user)
     with col3:
@@ -688,6 +688,6 @@ Statistik Forecast:
 
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: gray;'>PPIC Forecasting System Pro | PostgreSQL Database</div>",
+    "<div style='text-align: center; color: gray;'>PPIC Forecasting System | PostgreSQL Database</div>",
     unsafe_allow_html=True
 )
