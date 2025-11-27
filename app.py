@@ -688,6 +688,6 @@ Statistik Forecast:
 
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: gray;'>PPIC Forecasting System | PostgreSQL Database</div>",
+    "<div style='text-align: center; color: gray;'>PPIC Forecasting System | PT HERBA EMAS WAHIDATAMA</div>",
     unsafe_allow_html=True
 )
