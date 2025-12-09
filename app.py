@@ -294,7 +294,7 @@ def forecast_future(model, last_known_input, steps, data_min, data_max):
 
 if not st.session_state.logged_in:
     st.title("🔐 PPIC Forecasting System - Login")
-    st.markdown("### Sistem Forecasting dengan PostgreSQL Database")
+    st.markdown("### Sistem Forecasting dengan Machine Learning")
     
     tab1, tab2 = st.tabs(["🔑 Login", "📝 Register"])
     
@@ -347,6 +347,9 @@ else:
     # MAIN APP (SETELAH LOGIN)
     # ===========================
     
+
+    st.image("assets/logo.png", width=180)
+
     col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
         st.title("📊 PPIC Forecasting System")
@@ -688,6 +691,13 @@ Statistik Forecast:
 
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: gray;'>PPIC Forecasting System | PT HERBA EMAS WAHIDATAMA</div>",
+    "<div style='text-align: center; color: gray;'>PPIC Forecasting System| PT HERBA EMAS WAHIDATAMA</div>",
     unsafe_allow_html=True
 )
+
+BRAND_CONFIG = {
+    "logo_path": "assets/logo.png",  # Logo Anda
+    "logo_width": 180,
+    "company_name": "PT HERBA EMAS WAHIDATAMA"
+}
+
