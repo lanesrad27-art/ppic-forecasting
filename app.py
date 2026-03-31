@@ -691,13 +691,13 @@ Statistik Forecast:
 
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: gray;'>PPIC Forecasting System| PT HERBA EMAS WAHIDATAMA</div>",
+    "<div style='text-align: center; color: gray;'>PPIC Forecasting System| PROJECT 1 R</div>",
     unsafe_allow_html=True
 )
 
 BRAND_CONFIG = {
     "logo_path": "assets/logo.png",  # Logo Anda
     "logo_width": 180,
-    "company_name": "PT HERBA EMAS WAHIDATAMA"
+    "company_name": "PROJECT 1"
 }
 
