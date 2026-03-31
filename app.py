@@ -691,7 +691,7 @@ Statistik Forecast:
 
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: gray;'>PPIC Forecasting System| PROJECT 1 R</div>",
+    "<div style='text-align: center; color: gray;'>PPIC Forecasting System| PROJECT 1 </div>",
     unsafe_allow_html=True
 )
 
