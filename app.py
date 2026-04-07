@@ -393,10 +393,13 @@ else:
     # ===========================
     
 
+<<<<<<< HEAD
     import os
     if os.path.exists("assets/logo.png"):
         st.image("assets/logo.png", width=180)
 
+=======
+>>>>>>> bda9af7fba1f7c6c15c6b79fcf3a4717230499e9
     col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
         st.title("📊 PPIC Forecasting System")
@@ -769,14 +772,22 @@ Statistik Forecast:
 
 st.markdown("---")
 st.markdown(
+<<<<<<< HEAD
     "<div style='text-align: center; color: gray;'>PPIC Forecasting System| PROJECT 1</div>",
+=======
+    "<div style='text-align: center; color: gray;'>PPIC Forecasting System| PROJECT 1 </div>",
+>>>>>>> bda9af7fba1f7c6c15c6b79fcf3a4717230499e9
     unsafe_allow_html=True
 )
 
 BRAND_CONFIG = {
     "logo_path": "assets/logo.png",  # Logo Anda
     "logo_width": 180,
+<<<<<<< HEAD
     "company_name": "PT PROJECT 1R"
+=======
+    "company_name": "PROJECT 1"
+>>>>>>> bda9af7fba1f7c6c15c6b79fcf3a4717230499e9
 }
 
 from ppic_forecast_bridge import save_forecast_results, show_sync_status
