@@ -190,6 +190,51 @@ def delete_user_history_db(username):
         cur.close()
         return False
 
+# ===========================
+# INTEGRASI INVENTORY DASHBOARD
+# ===========================
+
+def get_inventory_products():
+    """Ambil daftar SKU & nama barang dari tabel products di inventory."""
+    try:
+        conn = init_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT sku, name FROM products
+            WHERE is_active = TRUE
+            ORDER BY name
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        # Return dict: {"Nama (SKU)": "SKU"}
+        return {f"{name} ({sku})": sku for sku, name in rows}
+    except Exception:
+        return {}  # Jika tabel belum ada, kembalikan kosong
+
+
+def save_forecast_to_inventory(sku, product_name, predictions, mape, window_size):
+    """
+    Simpan hasil forecast ke tabel forecast_results
+    supaya Inventory Dashboard bisa membaca & sync annual_demand.
+    """
+    try:
+        conn = init_connection()
+        cur  = conn.cursor()
+        for i, pred in enumerate(predictions):
+            cur.execute("""
+                INSERT INTO forecast_results
+                    (product_sku, product_name, bulan_ke,
+                     prediksi_demand, model_mape, window_size)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (sku, product_name, i + 1, float(pred), float(mape), int(window_size)))
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        st.warning(f"Tidak bisa sync ke inventory: {e}")
+        return False
+
+
 def get_user_stats_db(username):
     """Ambil statistik user"""
     conn = init_connection()
@@ -348,7 +393,9 @@ else:
     # ===========================
     
 
-    st.image("assets/logo.png", width=180)
+    import os
+    if os.path.exists("assets/logo.png"):
+        st.image("assets/logo.png", width=180)
 
     col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
@@ -408,6 +455,20 @@ else:
         
         window_size = st.sidebar.slider("Window Size (Smoothing):", 2, 10, 6)
         jumlah_bulan_forecast = st.sidebar.slider("Jumlah Bulan Forecast:", 1, 24, 12)
+
+        # ── Link ke Inventory Dashboard ──────────────────────
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("🔗 Link ke Inventory")
+        inventory_products = get_inventory_products()
+        if inventory_products:
+            selected_product_label = st.sidebar.selectbox(
+                "Pilih barang yang di-forecast:",
+                ["(Tidak disync)"] + list(inventory_products.keys()),
+                help="Pilih barang agar hasil forecast otomatis tersimpan ke Inventory Dashboard"
+            )
+        else:
+            selected_product_label = "(Tidak disync)"
+            st.sidebar.caption("Tabel inventory belum tersedia.")
         
         with st.sidebar.expander("⚡ Advanced Settings"):
             hidden1_size = st.selectbox("Hidden Layer 1:", [4, 6, 8], index=1)
@@ -531,6 +592,23 @@ else:
                         
                         if save_forecast_to_db(st.session_state.current_user, df_forecast.to_dict(), forecast_params):
                             st.success("💾 Hasil forecast telah disimpan ke PostgreSQL database!")
+
+                        # ── Sync ke Inventory Dashboard ──────────────────
+                        if selected_product_label != "(Tidak disync)" and inventory_products:
+                            selected_sku  = inventory_products[selected_product_label]
+                            selected_name = selected_product_label.split(" (")[0]
+                            ok = save_forecast_to_inventory(
+                                sku          = selected_sku,
+                                product_name = selected_name,
+                                predictions  = list(hasil_forecast),
+                                mape         = float(mape_test),
+                                window_size  = int(window_size),
+                            )
+                            if ok:
+                                st.info(
+                                    f"🔗 Forecast **{selected_name}** tersimpan ke Inventory! "
+                                    "Buka **Inventory Dashboard → Sync Forecast** untuk update demand."
+                                )
                         
                         col1, col2 = st.columns([1, 2])
                         
@@ -691,13 +769,24 @@ Statistik Forecast:
 
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: gray;'>PPIC Forecasting System| PT HERBA EMAS WAHIDATAMA</div>",
+    "<div style='text-align: center; color: gray;'>PPIC Forecasting System| PROJECT 1</div>",
     unsafe_allow_html=True
 )
 
 BRAND_CONFIG = {
     "logo_path": "assets/logo.png",  # Logo Anda
     "logo_width": 180,
-    "company_name": "PT HERBA EMAS WAHIDATAMA"
+    "company_name": "PT PROJECT 1R"
 }
 
+from ppic_forecast_bridge import save_forecast_results, show_sync_status
+
+# setelah prediksi berhasil:
+save_forecast_results(
+    sku          = "BM-001",       # SKU barang yang di-forecast
+    product_name = "Plat Besi 3mm",
+    predictions  = [2463, 2427, 2425, 2425, 2425],  # list hasil prediksi
+    mape         = 25.50,
+    window_size  = 6,
+)
+show_sync_status()
