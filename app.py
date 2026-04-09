@@ -13,7 +13,7 @@ import json
 # KONFIGURASI HALAMAN
 # ===========================
 st.set_page_config(
-    page_title="PPIC Forecasting",
+    page_title="Forecastly",
     page_icon="📊",
     layout="wide"
 )
@@ -338,7 +338,7 @@ def forecast_future(model, last_known_input, steps, data_min, data_max):
 # ===========================
 
 if not st.session_state.logged_in:
-    st.title("🔐 PPIC Forecasting System - Login")
+    st.title("🔐 Forecastly - Login")
     st.markdown("### Sistem Forecasting dengan Machine Learning")
     
     tab1, tab2 = st.tabs(["🔑 Login", "📝 Register"])
@@ -398,7 +398,7 @@ else:
 
     col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
-        st.title("📊 PPIC Forecasting System")
+        st.title("📊 Forecastly")
     with col2:
         st.metric("👤 User", st.session_state.current_user)
     with col3:
@@ -768,6 +768,6 @@ Statistik Forecast:
 
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: gray;'>PPIC Forecasting System | PROJECT 1</div>",
+    "<div style='text-align: center; color: gray;'> Forecasting System | PROJECT 1</div>",
     unsafe_allow_html=True
 )
