@@ -5,3 +5,4 @@ matplotlib
 psycopg2-binary
 sqlalchemy
 psycopg2-binary
+statsmodels>=0.14.0

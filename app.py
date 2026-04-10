@@ -574,6 +574,15 @@ else:
                             data_max=data_max
                         )
                         
+                        from arima_forecaster import run_arima_comparison
+
+                        run_arima_comparison(
+                            demand_data  = demand,
+                            ann_forecast = hasil_forecast,
+                            ann_mape     = mape_test,
+                            n_forecast   = jumlah_bulan_forecast
+                        )
+                        
                         df_forecast = pd.DataFrame({
                             'Bulan': [f"+{i+1}" for i in range(jumlah_bulan_forecast)],
                             'Prediksi Demand': [int(val) for val in hasil_forecast]
